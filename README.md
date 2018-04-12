@@ -5,6 +5,8 @@ Using Pybullet simulation environment to collect data as described in "Using Sim
 	Pybullet library in Python 3.6 environment(havn't tested it in other environment).
 
 # Usage
+## Run original Kuka environment:
+python -m pybullet_envs.examples.kukaGymEnvTest
 ## Step 1:
 Download procedurally generated random geometric shapes on https://sites.google.com/site/brainrobotdata/home/models.
 
