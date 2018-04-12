@@ -2,7 +2,7 @@
 Using Pybullet simulation environment to collect data as described in "Using Simulation and Domain Adaptation to Improve Efficiency of Deep Robotic Grasping"
 
 # Prerequisites:
-	Pybullet library in Python 3.6 environment(havn't tested it in other environment).
+	Pybullet library in Python 3.6 environment(havn't tested it in other environments yet).
 
 # Usage
 ## Run original Kuka environment:
