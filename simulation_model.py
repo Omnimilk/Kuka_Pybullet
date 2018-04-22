@@ -12,17 +12,19 @@ import copy
 import math
 import time
 import cv2
+import matplotlib.pyplot as plt
 from pprint import pprint
 from pybullet_envs.bullet.kukaGymEnv import KukaGymEnv
 from pybullet_envs.bullet.kukaCamGymEnv import KukaCamGymEnv
 from pybullet_envs.bullet.kuka import Kuka
 from sim_env_reconfigured import KukaCamGymEnv_Reconfigured
+from utils import commands_iterator,get_data_paths
 #gym envrionment information: 
 #   plane base [0,0,-1]
 #   tray base: [0.640000,0.075000,-0.190000], tray orientation: [0.000000,0.000000,1.000000,0.000000]
 #   table base:  [0.5000000,0.00000,-.820000], table orientation: [0.000000,0.000000,0.0,1.0]
 #   kuka base： [-0.100000,0.000000,0.070000], kuka orientation： [0.000000,0.000000,0.000000,1.000000]
-TRAY_RESCALE_FACTOR = 1.4
+TRAY_RESCALE_FACTOR = 1.8
 
 
 
@@ -86,7 +88,15 @@ def write_from_imgarr(imgarr,serial_number,path="sim_images/{0:0>6}.jpeg"):
     bgra =imgarr[2]#imgarr[3] depth image; imgarr[4] segmentation mask
     img = np.reshape(bgra, (512, 640, 4)).astype(np.uint8)#BGRA
     img = cv2.cvtColor(img,cv2.COLOR_BGRA2RGB)#RGB
-    cv2.imwrite(path.format(serial_number),img)
+    cv2.imwrite(path.format(serial_number),img)#write original image
+    # print(len(imgarr[4]))
+    segmentation_mask = imgarr[4]
+    segmentation_mask = np.reshape(segmentation_mask,(512,640,1)).astype(np.uint8)
+    # plt.imshow(segmentation_mask[:,:,0])
+    # plt.show()
+    segmentation_mask_path = path.format(serial_number)[:-5] + "_segmentation.jpeg"
+    # print("segmentation path: {}, shape of seg mask {}".format(segmentation_mask_path,segmentation_mask.shape))
+    cv2.imwrite(segmentation_mask_path,segmentation_mask)
 
 def write_from_npimg(npimg,serial_number,path="sim_images/{0:0>6}.jpeg"):
     img = np.reshape(npimg, (512, 640, 4)).astype(np.uint8)#BGRA
@@ -170,11 +180,10 @@ def main_usingEnvOnly():
     # print(cubePos,cubeOrn)
     # p.disconnect()
 
-
 def main():
-    # environment = KukaCamGymEnv(renders=True,isDiscrete=False)  
-    environment = KukaCamGymEnv_Reconfigured(renders=True,isDiscrete=False)  
-    environment._reset()
+    environment = KukaCamGymEnv(renders=True,isDiscrete=False)  
+    # environment = KukaCamGymEnv_Reconfigured(renders=True,isDiscrete=False)  
+    # environment._reset()
     # num_of_objects = 50
     # num_of_objects_var = 10
     num_of_objects = 20
@@ -192,12 +201,13 @@ def main():
 	#motorsIds.append(environment._p.addUserDebugParameter("posZ",0.1,1,0.2))
 	#motorsIds.append(environment._p.addUserDebugParameter("yaw",-3.14,3.14,0))
 	#motorsIds.append(environment._p.addUserDebugParameter("fingerAngle",0,0.3,.3))
-    dv = 1 
-    motorsIds.append(environment._p.addUserDebugParameter("posX",-dv,dv,0))
-    motorsIds.append(environment._p.addUserDebugParameter("posY",-dv,dv,0))
-    motorsIds.append(environment._p.addUserDebugParameter("posZ",-dv,dv,0))
-    motorsIds.append(environment._p.addUserDebugParameter("yaw",-dv,dv,0))
-    motorsIds.append(environment._p.addUserDebugParameter("fingerAngle",0,0.3,.3))	
+    # dv = 1 
+    # motorsIds.append(environment._p.addUserDebugParameter("posX",-dv,dv,0))#(paramName, rangeMin, rangeMax, startValue)
+    # motorsIds.append(environment._p.addUserDebugParameter("posY",-dv,dv,0))
+    # motorsIds.append(environment._p.addUserDebugParameter("posZ",-dv,dv,0))
+    # motorsIds.append(environment._p.addUserDebugParameter("yaw",-dv,dv,0))
+    # motorsIds.append(environment._p.addUserDebugParameter("fingerAngle",0,0.3,.3))	
+    
     done = False
 
     try:
@@ -207,7 +217,7 @@ def main():
         print("read serial number failed!")
         img_serial_num = 0
     step = 0
-    snapshot_interval = 50#42#20 before, 42 would make about 10 snapshot per try, like in the real world dataset
+    snapshot_interval = 1#50#42#20 before, 42 would make about 10 snapshot per try, like in the real world dataset
     # viewMat = [[ 775.71899414,    0.,           0.        ],
     #            [   0.,          775.71899414,    0.        ],
     #            [ 335.3380127,   232.45100403,    1.        ]]
@@ -219,24 +229,53 @@ def main():
     #                 [-0.88814598, -0.0368459,  -0.45808199,  0.293412  ],
     #                 [ 0.45908001, -0.116741,   -0.88069099,  0.71057898],
     #                 [ 0.,          0.,          0.,          1.        ]]
+    action_keys = ["grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7", "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7"]
+    data_folder = "/Users/bozai/Desktop/PixelDA/PixelDA/Data/tfdata"
+    file_tail = "22"
+    data_path = get_data_paths(data_folder,file_tail)
+    commands = commands_iterator(data_path)
     while (not done):    
-        action=[]
-        #print("step {}".format(step))
-        for motorId in motorsIds:
-            action.append(environment._p.readUserDebugParameter(motorId))
-        if step%snapshot_interval==0:
-            #get cameta image
-            print("Saving image... Current image count: {}".format(img_serial_num))
-            img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix)#640*512*3 
-            write_from_imgarr(img_arr, img_serial_num)
-            # np_img = environment.getExtendedObservation()#shape is not correct
-            # write_from_npimg(np_img,img_serial_num)
-            img_serial_num +=1
-            # environment._kuka.
-        step +=1
-        state, reward, done, info = environment.step(action)
+        # action=[]#5-D control signal
+        # for motorId in motorsIds:
+        #     action.append(environment._p.readUserDebugParameter(motorId))
+        # if step%snapshot_interval==0:
+        #     #get cameta image
+        #     print("Saving image... Current image count: {}".format(img_serial_num))
+        #     img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix)#640*512*3 
+        #     write_from_imgarr(img_arr, img_serial_num)
+        #     # np_img = environment.getExtendedObservation()#shape is not correct
+        #     # write_from_npimg(np_img,img_serial_num)
+        #     img_serial_num +=1
+        #     # environment._kuka.
+        # step +=1
+        # state, reward, done, info = environment.step(action)
         #obs = environment.getExtendedObservation()
         # print("done: {}, step: {}".format(done,step))
+        print("helloooooo")
+        attemption = commands.__next__()
+        print(attemption)
+        for action_with_quaternion in attemption:
+            print("action_with_quaternion: {}".format(action_with_quaternion))
+            quaternion = action_with_quaternion[0][3:]
+            print("Quaternion {}".format(quaternion))
+            euler = p.getEulerFromQuaternion(quaternion)#[yaw,pitch,roll]
+            action = action_with_quaternion[0][:3].tolist()
+            action.append(euler[0])
+            action.append(euler[2])
+            print("action: {}".format(action))
+            if step%snapshot_interval==0:
+                #get cameta image
+                print("Saving image... Current image count: {}".format(img_serial_num))
+                img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix)#640*512*3 
+                write_from_imgarr(img_arr, img_serial_num)
+                # np_img = environment.getExtendedObservation()#shape is not correct
+                # write_from_npimg(np_img,img_serial_num)
+                img_serial_num +=1       
+            step +=1
+            print("here")
+            state, reward, done, info = environment.step(action)
+            print("action executed")
+
         if done:
             environment._reset()
             randomObjs = add_random_objs_to_scene(num_of_objects+random.choice(range(-num_of_objects_var,num_of_objects_var+1)))
