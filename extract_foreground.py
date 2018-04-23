@@ -24,19 +24,64 @@ def concat_simfore_realback(sim_image,sim_segmentation,real_image):
     naive_concat = np.add(foreground_sim,background_real)
     return naive_concat
 
+def substitute_images(sim_images, sim_segmentations, real_images):
+    assert len(sim_images) == len(sim_segmentations)
+    assert len(sim_images) == len(real_images)
+    concated_images = []
+    for sim_image, sim_segmentation, real_image in zip(sim_images,sim_segmentations,real_images):
+        concated_image = concat_simfore_realback(sim_image, sim_segmentation, real_image)
+        concated_images.append(concated_image)
+    return concated_images
+
+def cv_read(path,channels = 3):
+    assert channels in (1,3), "image should have channel size of 1 or 3!"
+    if channels == 3:
+        image = cv2.imread(path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    else:
+        image = cv2.imread(path)
+    return image
+
+def read_images(size,sim_path, real_path):
+    real_images = []
+    sim_images = []
+    sim_segmentations = []
+    for i in range(size):
+        #sim image
+        sim_image_path = sim_path + "{0:0>6}.jpeg".format(i)
+        sim_image = cv_read(sim_image_path)
+        sim_images.append(sim_image)
+        #sim segmentation
+        sim_segmentation_path = sim_path + "{0:0>6}_segmentation.jpeg".format(i)
+        sim_segmentation = cv_read(sim_segmentation_path)
+        sim_segmentations.append(sim_segmentation)
+        #real image
+        real_image_path = real_path + "{0:0>6}.jpeg".format(i)
+        real_image = cv_read(real_image_path)
+        real_images.append(real_image)
+    return sim_images, sim_segmentations, real_images   
+
+def write_images2disk(images, path):
+    data_size = len(images)
+    for i in range(data_size):
+        cv2.imwrite("sim_backSubed/{0:0>6}.jpeg".format(i),images[i]) 
+    return
+
 def main():
+    sim_path = "sim_images/"
+    real_path = "real_5000/"
+    subed_path = "sim_backSubed"
     #load images
-    sim_image = cv2.imread("sim_images/000001.jpeg")
-    sim_image = cv2.cvtColor(sim_image,cv2.COLOR_BGR2RGB)
-    sim_mask = cv2.imread("sim_images/000000_segmentation.jpeg")
-    real_image = cv2.imread("sim_images/000000.jpeg")
-    real_image = cv2.cvtColor(real_image,cv2.COLOR_BGR2RGB)
+    sim_images, sim_segmentations, real_images = read_images(100,sim_path, real_path)
+    #substitute backgrounds for sim iamges
+    subed_images = substitute_images(sim_images,sim_segmentations,real_images)
+    #write subed images into disk
+    write_images2disk(subed_images,subed_path)
 
-    sim_ARed = concat_simfore_realback(sim_image,sim_mask,real_image)
-
-    plt.imshow(sim_ARed)
-    plt.show()
+   
 
 if __name__ == '__main__':
     main()
+    
+
     

@@ -40,7 +40,7 @@ class Kuka_Reconfigured(Kuka):
             p.resetJointState(self.kukaUid,jointIndex,self.jointPositions[jointIndex])
             p.setJointMotorControl2(self.kukaUid,jointIndex,p.POSITION_CONTROL,targetPosition=self.jointPositions[jointIndex],force=self.maxForce)
         #rescale the tray
-        self.trayUid = p.loadURDF(os.path.join(self.urdfRootPath,"tray/tray.urdf"), basePosition = (0.640000,0.075000,-0.190000), baseOrientation = (0.000000,0.000000,1.000000,0.00000), globalScaling = 1.4)
+        self.trayUid = p.loadURDF(os.path.join(self.urdfRootPath,"tray/tray.urdf"), basePosition = (0.640000,0.075000,-0.190000), baseOrientation = (0.000000,0.000000,1.000000,0.00000), globalScaling = 1.6)
         self.endEffectorPos = [0.537,0.0,0.5]
         self.endEffectorAngle = 0
 

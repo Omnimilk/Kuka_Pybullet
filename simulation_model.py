@@ -17,7 +17,7 @@ from pprint import pprint
 from pybullet_envs.bullet.kukaGymEnv import KukaGymEnv
 from pybullet_envs.bullet.kukaCamGymEnv import KukaCamGymEnv
 from pybullet_envs.bullet.kuka import Kuka
-from sim_env_reconfigured import KukaCamGymEnv_Reconfigured
+from sim_env_reconfigured import KukaCamGymEnv_Reconfigured,Kuka_Reconfigured
 from utils import commands_iterator,get_data_paths
 #gym envrionment information: 
 #   plane base [0,0,-1]
@@ -214,7 +214,137 @@ def main():
             print("Environment reseted!")
             with open("sim_images/serial_num_log.txt","w") as f:
                 f.write(str(img_serial_num))
+
+def setting_simulation_env():
+    time_step = 1./240.
+    urdfRoot=pybullet_data.getDataPath()
+    physicsClient = p.connect(p.GUI)
+    p.setAdditionalSearchPath(pybullet_data.getDataPath())
+
+    # p.resetDebugVisualizerCamera(1.3,180,-41,[0.52,-0.2,-0.33])
+    p.resetSimulation()
+    p.setPhysicsEngineParameter(numSolverIterations=150)
+    p.setTimeStep(time_step)
+    planeUid = p.loadURDF("plane.urdf",[0,0,-1])
+    tableUid = p.loadURDF("table/table.urdf", [0.5000000,0.00000,-.820000],[0.000000,0.000000,0.0,1.0])#globalScaling = 1.6
+
+    # xpos = 0.5 +0.2*random.random()
+    # ypos = 0 +0.25*random.random()
+    # ang = 3.1415925438*random.random()
+    # orn = p.getQuaternionFromEuler([0,0,ang])
+    # blockUid = p.loadURDF("block.urdf", xpos,ypos,-0.1,orn[0],orn[1],orn[2],orn[3])
+
+    p.setGravity(0,0,-10)
+    # kuka_arm = Kuka(urdfRootPath=urdfRoot, timeStep=time_step)
+    kuka_arm = Kuka_Reconfigured(urdfRootPath=urdfRoot, timeStep=time_step)
+    kuka_arm.useSimulation = 0
+    kukaUid = kuka_arm.kukaUid
+    kukaEndEffectorIndex = 6
+    #joint damping coefficents
+    jd=[0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001]
+    numJoints = kuka_arm.numJoints
+    envStepCounter = 0
+    # p.stepSimulation()
+
+    try:
+        with open("sim_images/serial_num_log.txt",'r') as f:
+            img_serial_num = int(f.read())
+    except:
+        print("read serial number failed!")
+        img_serial_num = 0
+
+
+
+    viewMat = get_randomized_ViewMat()#sigma = 0.001
+    camInfo = p.getDebugVisualizerCamera()# viewMat = camInfo[2]
+    projMatrix = camInfo[3]
+    action_keys = ["grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7", "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7"]
+    data_folder = "/Users/bozai/Desktop/PixelDA/PixelDA/Data/tfdata"
+    file_tail = "22"
+    data_path = get_data_paths(data_folder,file_tail)
+    commands = commands_iterator(data_path)
+    while True:    
+        attemption = commands.__next__()
+        for action_with_quaternion in attemption:
+            quaternion = action_with_quaternion[0][3:]
+            pos = action_with_quaternion[0][:3]
+            jointPoses = p.calculateInverseKinematics(kukaUid,kukaEndEffectorIndex,pos,quaternion,jointDamping=jd)
+            print("numJoints : {}, jointPoses: {}".format(numJoints,len(jointPoses)))
+            for i in range (12):
+                p.resetJointState(kukaUid,i,jointPoses[i])
+            
+            
+            # quaternion = action_with_quaternion[0][3:]
+            # euler = p.getEulerFromQuaternion(quaternion)#[yaw,pitch,roll]
+            # action = action_with_quaternion[0][:3].tolist()
+            # action.append(euler[0])
+            # action.append(euler[2])
+            # kuka_arm.applyAction(action)
+            print("Saving image... Current image count: {}".format(img_serial_num))
+            img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix)#640*512*3 
+            write_from_imgarr(img_arr, img_serial_num)
+            img_serial_num +=1
+        if img_serial_num>100:
+            with open("sim_images/serial_num_log.txt","w") as f:
+                f.write(str(img_serial_num))
+            break     
+            
+            # randomObjs = add_random_objs_to_scene(num_of_objects+random.choice(range(-num_of_objects_var,num_of_objects_var+1)))
+            # viewMat = get_randomized_ViewMat(sigma = 0.0001)#change view per try, not per image，0.003                                            
+            # done =False
+            # print("Environment reseted!")
+            # with open("sim_images/serial_num_log.txt","w") as f:
+            #     f.write(str(img_serial_num))
+
+   
+def observation_without_stepping():
+    #setting the environment
+    p.connect(p.DIRECT)
+
+
+    try:
+        with open("sim_images/serial_num_log.txt",'r') as f:
+            img_serial_num = int(f.read())
+    except:
+        print("read serial number failed!")
+        img_serial_num = 0
+
+    viewMat = get_randomized_ViewMat()#sigma = 0.001
+    camInfo = p.getDebugVisualizerCamera()# viewMat = camInfo[2]
+    projMatrix = camInfo[3]
+    action_keys = ["grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7", "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7"]
+    data_folder = "/Users/bozai/Desktop/PixelDA/PixelDA/Data/tfdata"
+    file_tail = "22"
+    data_path = get_data_paths(data_folder,file_tail)
+    commands = commands_iterator(data_path)
+    while (not done):    
+        attemption = commands.__next__()
+        for action_with_quaternion in attemption:
+            quaternion = action_with_quaternion[0][3:]
+            euler = p.getEulerFromQuaternion(quaternion)#[yaw,pitch,roll]
+            action = action_with_quaternion[0][:3].tolist()
+            action.append(euler[0])
+            action.append(euler[2])
+            if step%snapshot_interval==0:
+                #get cameta image
+                print("Saving image... Current image count: {}".format(img_serial_num))
+                img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix)#640*512*3 
+                write_from_imgarr(img_arr, img_serial_num)
+                img_serial_num +=1       
+            step +=1
+            state, reward, done, info = environment.step(action)#state: (256, 341, 4), info: empty dict
+            print("step: {} done: {} reward: {}".format(step, done, reward))
+        if done:
+            environment._reset()
+            randomObjs = add_random_objs_to_scene(num_of_objects+random.choice(range(-num_of_objects_var,num_of_objects_var+1)))
+            viewMat = get_randomized_ViewMat(sigma = 0.0001)#change view per try, not per image，0.003                                            
+            done =False
+            print("Environment reseted!")
+            with open("sim_images/serial_num_log.txt","w") as f:
+                f.write(str(img_serial_num))
+
 if __name__ == '__main__':
-    main()
+    # main()
     #main_usingEnvOnly()
+    setting_simulation_env()
     
