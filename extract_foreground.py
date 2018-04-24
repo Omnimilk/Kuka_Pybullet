@@ -12,15 +12,12 @@ def concat_simfore_realback(sim_image,sim_segmentation,real_image):
     #compute foreground mask
     sim_mask_foreground = np.copy(sim_segmentation)
     sim_mask_foreground[sim_mask_foreground > 0] = 1
-
     #compute foreground part of the simulated image
     foreground_sim = np.multiply(sim_image,sim_mask_foreground)
-
     #compute real background image
     foreground_real = np.multiply(real_image,sim_mask_foreground)
     background_real = np.subtract(real_image,foreground_real)
     # background_real = np.multiply(real_back,sim_mask_background)
-
     naive_concat = np.add(foreground_sim,background_real)
     return naive_concat
 
@@ -64,7 +61,8 @@ def read_images(size,sim_path, real_path):
 def write_images2disk(images, path):
     data_size = len(images)
     for i in range(data_size):
-        cv2.imwrite("sim_backSubed/{0:0>6}.jpeg".format(i),images[i]) 
+        image = cv2.cvtColor(images[i], cv2.COLOR_RGB2BGR)
+        cv2.imwrite("sim_backSubed/{0:0>6}.jpeg".format(i),image) 
     return
 
 def main():
@@ -72,13 +70,14 @@ def main():
     real_path = "real_5000/"
     subed_path = "sim_backSubed"
     #load images
-    sim_images, sim_segmentations, real_images = read_images(100,sim_path, real_path)
+    sim_images, sim_segmentations, real_images = read_images(1,sim_path, real_path)
+    # plt.imshow(sim_images[0])
+    plt.imshow(sim_segmentations[0])
+    plt.show()
     #substitute backgrounds for sim iamges
     subed_images = substitute_images(sim_images,sim_segmentations,real_images)
     #write subed images into disk
     write_images2disk(subed_images,subed_path)
-
-   
 
 if __name__ == '__main__':
     main()

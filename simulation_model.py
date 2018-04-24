@@ -19,6 +19,7 @@ from pybullet_envs.bullet.kukaCamGymEnv import KukaCamGymEnv
 from pybullet_envs.bullet.kuka import Kuka
 from sim_env_reconfigured import KukaCamGymEnv_Reconfigured,Kuka_Reconfigured
 from utils import commands_iterator,get_data_paths
+from extract_foreground import concat_simfore_realback
 #gym envrionment information: 
 #   plane base [0,0,-1]
 #   tray base: [0.640000,0.075000,-0.190000], tray orientation: [0.000000,0.000000,1.000000,0.000000]
@@ -40,10 +41,10 @@ def add_one_obj_to_scene(num,pos=None, orientation = None, global_scaling=1):
     assert num<1000, "random object number cannot exceed 1000!"
     assert pos is not None, "pos cannot be empty!"
     if orientation is None:
-        obj = p.loadURDF("random_urdfs/{0:0>3}/{0:0>3}.urdf".format(num,num),pos,globalScaling=global_scaling)
+        obj_Uid = p.loadURDF("random_urdfs/{0:0>3}/{0:0>3}.urdf".format(num),pos,globalScaling=global_scaling)
     else:
-        obj = p.loadURDF("random_urdfs/{0:0>3}/{0:0>3}.urdf".format(num,num),pos,orientation,globalScaling=global_scaling)
-    return obj
+        obj_Uid = p.loadURDF("random_urdfs/{0:0>3}/{0:0>3}.urdf".format(num),pos,orientation,globalScaling=global_scaling)
+    return obj_Uid
 
 def add_objs_to_scene(nums,poses,orientations=None):
     """
@@ -102,6 +103,16 @@ def write_from_npimg(npimg,serial_number,path="sim_images/{0:0>6}.jpeg"):
     img = np.reshape(npimg, (512, 640, 4)).astype(np.uint8)#BGRA
     img = cv2.cvtColor(img,cv2.COLOR_BGRA2RGB)#RGB
     cv2.imwrite(path.format(serial_number),img)
+
+def substitute_from_imgarr(imgarr,real_image):
+    bgra =imgarr[2]#imgarr[3] depth image; imgarr[4] segmentation mask
+    img = np.reshape(bgra, (512, 640, 4)).astype(np.uint8)#BGRA
+    img = cv2.cvtColor(img,cv2.COLOR_BGRA2BGR)#RGB
+    segmentation_mask = imgarr[4]
+    segmentation_mask = np.reshape(segmentation_mask,(512,640)).astype(np.uint8)
+    segmentation_mask = np.dstack((segmentation_mask,segmentation_mask,segmentation_mask))
+    substitued = concat_simfore_realback(img, segmentation_mask, real_image)
+    return substitued
 
 def get_randomized_ViewMat(sigma=None):
     if sigma is not None:
@@ -217,6 +228,8 @@ def main():
 
 def setting_simulation_env():
     time_step = 1./240.
+    num_of_objects = 20
+    num_of_objects_var = 4
     urdfRoot=pybullet_data.getDataPath()
     physicsClient = p.connect(p.GUI)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -226,7 +239,7 @@ def setting_simulation_env():
     p.setPhysicsEngineParameter(numSolverIterations=150)
     p.setTimeStep(time_step)
     planeUid = p.loadURDF("plane.urdf",[0,0,-1])
-    tableUid = p.loadURDF("table/table.urdf", [0.5000000,0.00000,-.820000],[0.000000,0.000000,0.0,1.0])#globalScaling = 1.6
+    # tableUid = p.loadURDF("table/table.urdf", [0.5000000,0.00000,-.820000],[0.000000,0.000000,0.0,1.0])#globalScaling = 1.6
 
     # xpos = 0.5 +0.2*random.random()
     # ypos = 0 +0.25*random.random()
@@ -246,30 +259,32 @@ def setting_simulation_env():
     envStepCounter = 0
     # p.stepSimulation()
 
-    try:
-        with open("sim_images/serial_num_log.txt",'r') as f:
-            img_serial_num = int(f.read())
-    except:
-        print("read serial number failed!")
-        img_serial_num = 0
+    # try:
+    #     with open("sim_images/serial_num_log.txt",'r') as f:
+    #         img_serial_num = int(f.read())
+    # except:
+    #     print("read serial number failed!")
+    #     img_serial_num = 0
+    img_serial_num = 0
 
 
 
     viewMat = get_randomized_ViewMat()#sigma = 0.001
     camInfo = p.getDebugVisualizerCamera()# viewMat = camInfo[2]
     projMatrix = camInfo[3]
-    action_keys = ["grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7", "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7"]
+    # action_keys = ["grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7", "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7"]
     data_folder = "/Users/bozai/Desktop/PixelDA/PixelDA/Data/tfdata"
     file_tail = "22"
     data_path = get_data_paths(data_folder,file_tail)
     commands = commands_iterator(data_path)
     while True:    
-        attemption = commands.__next__()
+        attemption, image = commands.__next__()
+        randomObjs = add_random_objs_to_scene(num_of_objects+random.choice(range(-num_of_objects_var,num_of_objects_var+1)))
         for action_with_quaternion in attemption:
             quaternion = action_with_quaternion[0][3:]
             pos = action_with_quaternion[0][:3]
             jointPoses = p.calculateInverseKinematics(kukaUid,kukaEndEffectorIndex,pos,quaternion,jointDamping=jd)
-            print("numJoints : {}, jointPoses: {}".format(numJoints,len(jointPoses)))
+            # print("numJoints : {}, jointPoses: {}".format(numJoints,len(jointPoses)))
             for i in range (12):
                 p.resetJointState(kukaUid,i,jointPoses[i])
             
@@ -279,12 +294,18 @@ def setting_simulation_env():
             # action = action_with_quaternion[0][:3].tolist()
             # action.append(euler[0])
             # action.append(euler[2])
-            # kuka_arm.applyAction(action)
-            print("Saving image... Current image count: {}".format(img_serial_num))
+            # kuka_arm.applyAction(action)#bug in the module implementation
+            # print("Saving image... Current image count: {}".format(img_serial_num))
             img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix)#640*512*3 
-            write_from_imgarr(img_arr, img_serial_num)
+            # write_from_imgarr(img_arr, img_serial_num)
+            subed = substitute_from_imgarr(img_arr,image)
+            subed = cv2.cvtColor(subed, cv2.COLOR_RGB2BGR)
+            cv2.imwrite("sim_backSubed/{0:0>6}_subed.jpeg".format(img_serial_num),subed)
+            # print("subed shape : {}".format(subed.shape))
+            # plt.imshow(subed)
+            # plt.show()
             img_serial_num +=1
-        if img_serial_num>100:
+        if img_serial_num>20:#40000
             with open("sim_images/serial_num_log.txt","w") as f:
                 f.write(str(img_serial_num))
             break     
@@ -295,53 +316,6 @@ def setting_simulation_env():
             # print("Environment reseted!")
             # with open("sim_images/serial_num_log.txt","w") as f:
             #     f.write(str(img_serial_num))
-
-   
-def observation_without_stepping():
-    #setting the environment
-    p.connect(p.DIRECT)
-
-
-    try:
-        with open("sim_images/serial_num_log.txt",'r') as f:
-            img_serial_num = int(f.read())
-    except:
-        print("read serial number failed!")
-        img_serial_num = 0
-
-    viewMat = get_randomized_ViewMat()#sigma = 0.001
-    camInfo = p.getDebugVisualizerCamera()# viewMat = camInfo[2]
-    projMatrix = camInfo[3]
-    action_keys = ["grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7", "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7"]
-    data_folder = "/Users/bozai/Desktop/PixelDA/PixelDA/Data/tfdata"
-    file_tail = "22"
-    data_path = get_data_paths(data_folder,file_tail)
-    commands = commands_iterator(data_path)
-    while (not done):    
-        attemption = commands.__next__()
-        for action_with_quaternion in attemption:
-            quaternion = action_with_quaternion[0][3:]
-            euler = p.getEulerFromQuaternion(quaternion)#[yaw,pitch,roll]
-            action = action_with_quaternion[0][:3].tolist()
-            action.append(euler[0])
-            action.append(euler[2])
-            if step%snapshot_interval==0:
-                #get cameta image
-                print("Saving image... Current image count: {}".format(img_serial_num))
-                img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix)#640*512*3 
-                write_from_imgarr(img_arr, img_serial_num)
-                img_serial_num +=1       
-            step +=1
-            state, reward, done, info = environment.step(action)#state: (256, 341, 4), info: empty dict
-            print("step: {} done: {} reward: {}".format(step, done, reward))
-        if done:
-            environment._reset()
-            randomObjs = add_random_objs_to_scene(num_of_objects+random.choice(range(-num_of_objects_var,num_of_objects_var+1)))
-            viewMat = get_randomized_ViewMat(sigma = 0.0001)#change view per try, not per image，0.003                                            
-            done =False
-            print("Environment reseted!")
-            with open("sim_images/serial_num_log.txt","w") as f:
-                f.write(str(img_serial_num))
 
 if __name__ == '__main__':
     # main()
