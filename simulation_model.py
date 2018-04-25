@@ -17,7 +17,7 @@ from pprint import pprint
 from pybullet_envs.bullet.kukaGymEnv import KukaGymEnv
 from pybullet_envs.bullet.kukaCamGymEnv import KukaCamGymEnv
 from pybullet_envs.bullet.kuka import Kuka
-from sim_env_reconfigured import KukaCamGymEnv_Reconfigured,Kuka_Reconfigured
+from sim_env_reconfigured import KukaCamGymEnv_Reconfigured,Kuka_Reconfigured,TRAY_RESCALE_FACTOR
 from utils import commands_iterator,get_data_paths
 from extract_foreground import concat_simfore_realback
 #gym envrionment information: 
@@ -25,7 +25,7 @@ from extract_foreground import concat_simfore_realback
 #   tray base: [0.640000,0.075000,-0.190000], tray orientation: [0.000000,0.000000,1.000000,0.000000]
 #   table base:  [0.5000000,0.00000,-.820000], table orientation: [0.000000,0.000000,0.0,1.0]
 #   kuka base： [-0.100000,0.000000,0.070000], kuka orientation： [0.000000,0.000000,0.000000,1.000000]
-TRAY_RESCALE_FACTOR = 1.8
+
 
 
 
@@ -78,7 +78,7 @@ def add_random_objs_to_scene(size,pos_mean=[0,0],pos_height=1,orientation_mean=[
         objs = add_objs_to_scene(nums,poses)
     else:
         nums = [random.randint(0,999) for _ in range(size)]
-        poses = [[normal(0.64,0.14),normal(scale=0.14),-0.182] for _ in range(size)]#container center position (0.6,0,0)
+        poses = [[normal(0.64,0.14),normal(scale=0.14),-0.182] for _ in range(size)]#container center position (0.64,0.075,-0.19)
         # poses = [[uniform]]
         orientations = [normal(size=(4)) for _ in range(size)]
         objs = add_objs_to_scene(nums,poses,orientations)
@@ -118,21 +118,38 @@ def get_randomized_ViewMat(sigma=None):
     if sigma is not None:
         mean = [0,0,0]
         cov = sigma*np.eye(3)
-        camEyePos = np.array([0.42,0.2,0.54]) + np.random.multivariate_normal(mean,cov)
+        camEyePos = np.array([0.42,0.2,0.8]) + np.random.multivariate_normal(mean,cov)
         targetPos = np.array([0.55,0.2,-0.180000]) + np.random.multivariate_normal(mean,cov)
         # camEyePos = np.array([0.03,0.236,0.54]) + np.random.multivariate_normal(mean,cov)
         # # targetPos = np.array([0.640000,0.075000,-0.190000]) + np.random.multivariate_normal(mean,cov)
         # targetPos = np.array([0.640000,0.0000,-0.190000]) + np.random.multivariate_normal(mean,cov)
     else:#fixed camera angle to get naive dataset
-        camEyePos = np.array([0.42,0.2,0.54])
-        targetPos = np.array([0.55,0.2,-0.180000])
+        eye_x = 0.21#0.16
+        eye_y = 0.24
+        eye_z = 0.64
+
+        target_x = 0.52
+        target_y = 0.19
+        target_z = 0
+        camEyePos = np.array([eye_x,eye_y,eye_z]) #arm base [-0.1,-0.075,0.070000], tray base (0.640000,0.075000,-0.190000)
+        targetPos = np.array([target_x,target_y,target_z])
+        # camEyePos = np.array([0.24,0.2,0.54]) #arm base [-0.1,-0.075,0.070000], tray base (0.640000,0.075000,-0.190000)
+        # targetPos = np.array([0.64,0.2,-0.190000])
+        # camEyePos = np.array([0.42,0.2,0.54])
+        # targetPos = np.array([0.55,0.2,-0.180000])
         # camEyePos = np.array([0.45,0.25,0.54])
         # targetPos = np.array([0.54,0.25,-0.180000])
         # camEyePos = np.array([0.03,0.236,0.54])
         # targetPos = np.array([0.640000,0.0000,-0.190000])
+    #cameraUp = np.array([ (target_x-eye_x)/(eye_z-target_z), (target_y - eye_y)/ (eye_z - target_z) ,1])
     cameraUp = np.array([0,0,1])
     viewMat = p.computeViewMatrix(camEyePos,targetPos,cameraUp)
     return viewMat
+
+def get_ProjMat():
+    projMat = p.computeProjectionMatrixFOV(fov=46.5, aspect=1.25, nearVal=0.001, farVal=100)
+    return projMat
+        
 
 def main_usingEnvOnly():
     environment = KukaGymEnv(renders=True,isDiscrete=False, maxSteps = 10000000)
@@ -226,39 +243,43 @@ def main():
             with open("sim_images/serial_num_log.txt","w") as f:
                 f.write(str(img_serial_num))
 
-def setting_simulation_env():
-    time_step = 1./240.
-    num_of_objects = 20
-    num_of_objects_var = 4
-    urdfRoot=pybullet_data.getDataPath()
-    physicsClient = p.connect(p.GUI)
-    p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
-    # p.resetDebugVisualizerCamera(1.3,180,-41,[0.52,-0.2,-0.33])
+def reset_sim_env(time_step = 1./240.):
+    # p.disconnect()
+    urdfRoot=pybullet_data.getDataPath()
+    p.connect(p.DIRECT)#DIRECT
+    p.setAdditionalSearchPath(pybullet_data.getDataPath())
     p.resetSimulation()
     p.setPhysicsEngineParameter(numSolverIterations=150)
     p.setTimeStep(time_step)
-    planeUid = p.loadURDF("plane.urdf",[0,0,-1])
-    # tableUid = p.loadURDF("table/table.urdf", [0.5000000,0.00000,-.820000],[0.000000,0.000000,0.0,1.0])#globalScaling = 1.6
-
-    # xpos = 0.5 +0.2*random.random()
-    # ypos = 0 +0.25*random.random()
-    # ang = 3.1415925438*random.random()
-    # orn = p.getQuaternionFromEuler([0,0,ang])
-    # blockUid = p.loadURDF("block.urdf", xpos,ypos,-0.1,orn[0],orn[1],orn[2],orn[3])
+    p.loadURDF("plane.urdf",[0,0,-1])
 
     p.setGravity(0,0,-10)
     # kuka_arm = Kuka(urdfRootPath=urdfRoot, timeStep=time_step)
     kuka_arm = Kuka_Reconfigured(urdfRootPath=urdfRoot, timeStep=time_step)
     kuka_arm.useSimulation = 0
-    kukaUid = kuka_arm.kukaUid
-    kukaEndEffectorIndex = 6
-    #joint damping coefficents
-    jd=[0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001]
-    numJoints = kuka_arm.numJoints
-    envStepCounter = 0
-    # p.stepSimulation()
+    return kuka_arm
 
+def setting_simulation_env():
+    time_step = 1./240.
+    num_of_objects = 20
+    num_of_objects_var = 4
+    # p.connect(p.GUI)
+    reset_sim_env()
+   
+    viewMat = get_randomized_ViewMat()#sigma = 0.001
+    # projMatrix = [  [-0.0210269,  -0.99247903,  0.120598,    0.26878399],
+    #             [-0.88814598, -0.0368459,  -0.45808199,  0.293412  ],
+    #             [ 0.45908001, -0.116741,   -0.88069099,  0.71057898],
+    #             [ 0.,          0.,          0.,          1.        ]]
+    # camInfo = p.getDebugVisualizerCamera()# viewMat = camInfo[2]
+    # projMatrix = camInfo[3]
+    projMatrix = get_ProjMat()
+    # action_keys = ["grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7", "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7"]
+    data_folder = "/Users/bozai/Desktop/PixelDA/PixelDA/Data/tfdata"
+    file_tail = "22"
+    data_path = get_data_paths(data_folder,file_tail)
+    commands = commands_iterator(data_path)
     # try:
     #     with open("sim_images/serial_num_log.txt",'r') as f:
     #         img_serial_num = int(f.read())
@@ -266,18 +287,14 @@ def setting_simulation_env():
     #     print("read serial number failed!")
     #     img_serial_num = 0
     img_serial_num = 0
-
-
-
-    viewMat = get_randomized_ViewMat()#sigma = 0.001
-    camInfo = p.getDebugVisualizerCamera()# viewMat = camInfo[2]
-    projMatrix = camInfo[3]
-    # action_keys = ["grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7", "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7"]
-    data_folder = "/Users/bozai/Desktop/PixelDA/PixelDA/Data/tfdata"
-    file_tail = "22"
-    data_path = get_data_paths(data_folder,file_tail)
-    commands = commands_iterator(data_path)
-    while True:    
+    kukaEndEffectorIndex = 6
+    #joint damping coefficents
+    jd=[0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001]
+    while True:
+        kuka_arm = reset_sim_env()
+        kukaUid = kuka_arm.kukaUid
+        # numJoints = kuka_arm.numJoints
+        
         attemption, image = commands.__next__()
         randomObjs = add_random_objs_to_scene(num_of_objects+random.choice(range(-num_of_objects_var,num_of_objects_var+1)))
         for action_with_quaternion in attemption:
@@ -286,26 +303,22 @@ def setting_simulation_env():
             jointPoses = p.calculateInverseKinematics(kukaUid,kukaEndEffectorIndex,pos,quaternion,jointDamping=jd)
             # print("numJoints : {}, jointPoses: {}".format(numJoints,len(jointPoses)))
             for i in range (12):
-                p.resetJointState(kukaUid,i,jointPoses[i])
-            
-            
+                p.resetJointState(kukaUid,i,jointPoses[i])    
+            # time.sleep(30)
             # quaternion = action_with_quaternion[0][3:]
             # euler = p.getEulerFromQuaternion(quaternion)#[yaw,pitch,roll]
             # action = action_with_quaternion[0][:3].tolist()
             # action.append(euler[0])
             # action.append(euler[2])
             # kuka_arm.applyAction(action)#bug in the module implementation
-            # print("Saving image... Current image count: {}".format(img_serial_num))
-            img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix)#640*512*3 
+            print("Saving image... Current image count: {}".format(img_serial_num))
+            img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix,lightDirection=[1,1,1])#640*512*3 
             # write_from_imgarr(img_arr, img_serial_num)
             subed = substitute_from_imgarr(img_arr,image)
             subed = cv2.cvtColor(subed, cv2.COLOR_RGB2BGR)
             cv2.imwrite("sim_backSubed/{0:0>6}_subed.jpeg".format(img_serial_num),subed)
-            # print("subed shape : {}".format(subed.shape))
-            # plt.imshow(subed)
-            # plt.show()
             img_serial_num +=1
-        if img_serial_num>20:#40000
+        if img_serial_num>10000:#40000
             with open("sim_images/serial_num_log.txt","w") as f:
                 f.write(str(img_serial_num))
             break     
