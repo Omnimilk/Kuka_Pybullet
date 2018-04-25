@@ -63,7 +63,9 @@ def commands_iterator(data_path):
     features = {"initial/commanded_pose/transforms/base_T_endeffector/vec_quat_7":tf.FixedLenFeature([7], tf.float32),
                 "grasp/0/commanded_pose/transforms/base_T_endeffector/vec_quat_7":tf.FixedLenFeature([7], tf.float32),
                 "grasp/1/commanded_pose/transforms/base_T_endeffector/vec_quat_7":tf.FixedLenFeature([7], tf.float32),
-                "post_drop/image/encoded": tf.FixedLenFeature([], tf.string)}
+                "post_drop/image/encoded": tf.FixedLenFeature([], tf.string),
+                "camera/intrinsics/matrix33": tf.FixedLenFeature([3,3], tf.float32),
+                "camera/transforms/camera_T_base/matrix44": tf.FixedLenFeature([4,4], tf.float32)}
     filename_queue = tf.train.string_input_producer(data_path,shuffle=True, num_epochs=2)
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
@@ -91,29 +93,32 @@ def commands_iterator(data_path):
                     #print(image)
                     # plt.imshow(image)
                     # plt.show()
-            yield commands_evaled, image
-            # try:
-            #     commands_evaled = []
-            #     for key, tensor in commands.items():
-            #         if key.endswith("vec_quat_7"):
-            #             commands_evaled.append(sess.run(tensor))
-            #         elif key.startswith("post_drop"):
-            #             image = tf.image.decode_jpeg(tensor,channels=3)#Camera RGB images are stored in JPEG format.
-            #             image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
-            #             image = tf.reshape(image, [512,640,3])
-            #             image = sess.run(image)
-            #             #print(image)
-            #     yield commands_evaled, image
-            # except:
-            #     #print("Failed to read out commands.")
-            #     pass
+                # elif key.endswith("matrix33"):
+                #     view_mat = sess.run(tensor)
+                # elif key.endswith("matrix44"):
+                #     proj_mat = sess.run(tensor)
+            yield commands_evaled, image#, view_mat, proj_mat
 
-def test():
-    data_folder = "/Users/bozai/Desktop/PixelDA/PixelDA/Data/tfdata"
-    file_tail = "22"
-    data_path = get_data_paths(data_folder,file_tail)
-    commands = commands_iterator(data_path)
 
+    fea_name = "camera/intrinsics/matrix33"# "camera/transforms/camera_T_base/matrix44"
+    features = {fea_name: tf.FixedLenFeature([3,3], tf.float32)}
+    filename_queue = tf.train.string_input_producer(data_path,shuffle=True, num_epochs=2)
+    reader = tf.TFRecordReader()
+    _, serialized_example = reader.read(filename_queue)
+    features = tf.parse_single_example(serialized_example, features=features)
+    camera_params = features[fea_name]
+    camera_params = tf.train.shuffle_batch([camera_params], batch_size=1, capacity=12, num_threads=2, min_after_dequeue=10)
+    with tf.Session() as sess: 
+        #initialize variables 
+        init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+        sess.run(init_op)
+        # Create a coordinator and run all QueueRunner objects
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(coord=coord)
+        ca_param =sess.run(camera_params)
+        print(ca_param)
+        coord.request_stop()
+        coord.join(threads)
 
 def main():    
     feature_names = read_feature_names(feature_key_path)
@@ -184,8 +189,12 @@ def main():
         #     ]]
 
     #image feature
-    fea_name = "post_drop/image/encoded"#"gripper/image/encoded"#"present/image/encoded"#"grasp/0/image/encoded"#
-    features_dict = {fea_name: tf.FixedLenFeature([], tf.string)}
+    # fea_name = "post_drop/image/encoded"#"gripper/image/encoded"#"present/image/encoded"#"grasp/0/image/encoded"#
+    # features_dict = {fea_name: tf.FixedLenFeature([], tf.string)}
+
+    features_dict = {"grasp/0/image/encoded":tf.FixedLenFeature([],tf.string),
+                    "grasp/1/image/encoded":tf.FixedLenFeature([],tf.string)}
+
     # features_dict = {
     #   "grasp/0/image/encoded": tf.FixedLenFeature([],tf.string),
     #   "grasp/1/image/encoded": tf.FixedLenFeature([],tf.string),
@@ -218,21 +227,22 @@ def main():
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
     features = tf.parse_single_example(serialized_example, features=features_dict)
-    # processed_images = []
-    # for key in features_dict:
-    #     print(key)#dictionary keys are in the same order as they were constructed? Yes
-    #     image_buffer = features[key]
-    #     image = tf.image.decode_jpeg(image_buffer, channels=3)
-    #     image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
-    #     image = tf.reshape(image, [512,640,3])
-    #     processed_images.append(image)
+    processed_images = []
+    for key in features_dict:
+        print(key)#dictionary keys are in the same order as they were constructed? Yes
+        image_buffer = features[key]
+        image = tf.image.decode_jpeg(image_buffer, channels=3)
+        image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
+        image = tf.reshape(image, [512,640,3])
+        processed_images.append(image)
     # images = tf.train.shuffle_batch(processed_images, batch_size=1, capacity=12, num_threads=2, min_after_dequeue=10)
+    images = tf.train.batch(processed_images, batch_size=1, capacity=12, num_threads=1)
 
     #for single pic
-    image = tf.image.decode_jpeg(features[fea_name],channels=3)#Camera RGB images are stored in JPEG format.
-    image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
-    image = tf.reshape(image, [512,640,3])#(512, 640) random cropped to (472, 472)
-    images = tf.train.shuffle_batch([image], batch_size=1, capacity=12, num_threads=1, min_after_dequeue=10)
+    # image = tf.image.decode_jpeg(features[fea_name],channels=3)#Camera RGB images are stored in JPEG format.
+    # image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
+    # image = tf.reshape(image, [512,640,3])#(512, 640) random cropped to (472, 472)
+    # images = tf.train.shuffle_batch([image], batch_size=1, capacity=12, num_threads=1, min_after_dequeue=10)
 
     with tf.Session() as sess:   
         #initialize variables 
@@ -241,20 +251,21 @@ def main():
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
         #for single feature image
-        for i in range(1):
-            imgs= sess.run(images)
-            plt.imshow(imgs[i])
-        plt.show()
+        # for i in range(1):
+        #     imgs= sess.run(images)
+        #     plt.imshow(imgs[i])
+        # plt.show()
     #     #for multiple features images
     #     fig = plt.figure()
-    #     num_batches = 100
-    #     for i in range(num_batches):
-    #         for img_idx in range(10):
-    #             img= sess.run(images[img_idx])
-    #             # print(img.shape)
-    #             img = img[0]
-    #             img = img.astype(np.uint8)   
-    #             cv2.imwrite("mini_trainingset/{0:0>6}.jpeg".format(i*10 + img_idx),img)    
+        num_batches = 503
+        for i in range(num_batches):
+            for img_idx in range(2):
+                img= sess.run(images[img_idx])
+                # print(img.shape)
+                img = img[0]
+                img = img.astype(np.uint8)   
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                cv2.imwrite("real_22/{0:0>6}.jpeg".format(i*2 + img_idx),img)    
     #         #     ax = fig.add_subplot(3, 4, img_idx + 1)
     #         #     plt.xticks([])
     #         #     plt.yticks([])
@@ -262,8 +273,8 @@ def main():
     #         # #plt.xkcd(scale=1, length=100, randomness=2)
     #         # plt.tight_layout()
     #         # plt.show()
-    #     coord.request_stop()
-    #     coord.join(threads)
+        coord.request_stop()
+        coord.join(threads)
         
 if __name__ == '__main__':
     main()
