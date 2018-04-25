@@ -10,6 +10,8 @@ import random
 from pybullet_envs.bullet.kukaGymEnv import KukaGymEnv
 from pybullet_envs.bullet.kukaCamGymEnv import KukaCamGymEnv
 from pybullet_envs.bullet.kuka import Kuka
+TRAY_RESCALE_FACTOR = 1
+
 #gym envrionment information: 
 #   plane base [0,0,-1]
 #   tray base: [0.640000,0.075000,-0.190000], tray orientation: [0.000000,0.000000,1.000000,0.000000]
@@ -31,8 +33,10 @@ class Kuka_Reconfigured(Kuka):
     def reset(self):
         objects = p.loadSDF(os.path.join(self.urdfRootPath,"kuka_iiwa/kuka_with_gripper2.sdf"))
         self.kukaUid = objects[0]
+        # tray_height = 0.2*TRAY_RESCALE_FACTOR, camara at the right edge of  the tray, arm at the left edge of the tray
         #Arm base reconfigured
-        p.resetBasePositionAndOrientation(self.kukaUid,[-0.1,-0.075,0.070000],[0.000000,0.000000,0.000000,1.000000])
+        p.resetBasePositionAndOrientation(self.kukaUid,[0.1,-0.05,0.07],[0.000000,0.000000,0.000000,1.000000])
+        # p.resetBasePositionAndOrientation(self.kukaUid,[-0.1,-0.075,0.070000],[0.000000,0.000000,0.000000,1.000000])
         # p.resetBasePositionAndOrientation(self.kukaUid,[-0.100000,0.000000,0.070000],[0.000000,0.000000,0.000000,1.000000])
         self.jointPositions=[ 0.006418, 0.413184, -0.011401, -1.589317, 0.005379, 1.137684, -0.006539, 0.000048, -0.299912, 0.000000, -0.000043, 0.299960, 0.000000, -0.000200 ]
         self.numJoints = p.getNumJoints(self.kukaUid)
@@ -40,7 +44,7 @@ class Kuka_Reconfigured(Kuka):
             p.resetJointState(self.kukaUid,jointIndex,self.jointPositions[jointIndex])
             p.setJointMotorControl2(self.kukaUid,jointIndex,p.POSITION_CONTROL,targetPosition=self.jointPositions[jointIndex],force=self.maxForce)
         #rescale the tray
-        self.trayUid = p.loadURDF(os.path.join(self.urdfRootPath,"tray/tray.urdf"), basePosition = (0.640000,0.075000,-0.190000), baseOrientation = (0.000000,0.000000,1.000000,0.00000), globalScaling = 1.6)
+        self.trayUid = p.loadURDF(os.path.join(self.urdfRootPath,"tray/tray.urdf"), basePosition = (0.640000,0.075000,-0.190000), baseOrientation = (0.000000,0.000000,1.000000,0.00000), globalScaling = TRAY_RESCALE_FACTOR)
         self.endEffectorPos = [0.537,0.0,0.5]
         self.endEffectorAngle = 0
 
