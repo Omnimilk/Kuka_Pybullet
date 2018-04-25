@@ -4,6 +4,10 @@ Using Pybullet simulation environment to collect data as described in "Using Sim
 # Prerequisites:
 	Pybullet library in Python 3.6 environment(havn't tested it in other environments yet).
 
+#  Build training data:
+python build_data.py --X_input_dir "sim_backSubed" --X_output_file "simsubed_22_1006.tfrecords"
+
+
 # Usage
 ## Run original Kuka environment:
 python -m pybullet_envs.examples.kukaGymEnvTest
