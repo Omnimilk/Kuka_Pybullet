@@ -76,15 +76,15 @@ class KukaCamGymEnv_Reconfigured(KukaCamGymEnv):
         p.resetSimulation()
         p.setPhysicsEngineParameter(numSolverIterations=150)
         p.setTimeStep(self._timeStep)
-        p.loadURDF(os.path.join(self._urdfRoot,"plane.urdf"),[0,0,-1])
+        # p.loadURDF(os.path.join(self._urdfRoot,"plane.urdf"),[0,0,-1])
 
-        p.loadURDF(os.path.join(self._urdfRoot,"table/table.urdf"), 0.5000000,0.00000,-.820000,0.000000,0.000000,0.0,1.0)
+        # p.loadURDF(os.path.join(self._urdfRoot,"table/table.urdf"), 0.5000000,0.00000,-.820000,0.000000,0.000000,0.0,1.0)
 
-        xpos = 0.5 +0.2*random.random()
-        ypos = 0 +0.25*random.random()
-        ang = 3.1415925438*random.random()
-        orn = p.getQuaternionFromEuler([0,0,ang])
-        self.blockUid =p.loadURDF(os.path.join(self._urdfRoot,"block.urdf"), xpos,ypos,-0.1,orn[0],orn[1],orn[2],orn[3])
+        # xpos = 0.5 +0.2*random.random()
+        # ypos = 0 +0.25*random.random()
+        # ang = 3.1415925438*random.random()
+        # orn = p.getQuaternionFromEuler([0,0,ang])
+        # self.blockUid =p.loadURDF(os.path.join(self._urdfRoot,"block.urdf"), xpos,ypos,-0.1,orn[0],orn[1],orn[2],orn[3])
 
         p.setGravity(0,0,-10)
         #Kuka arm class altered

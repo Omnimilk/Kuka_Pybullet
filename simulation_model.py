@@ -152,7 +152,10 @@ def get_ProjMat():
         
 
 def main_usingEnvOnly():
-    environment = KukaGymEnv(renders=True,isDiscrete=False, maxSteps = 10000000)
+    # environment = KukaGymEnv(renders=True,isDiscrete=False, maxSteps = 10000000)
+    environment =  KukaCamGymEnv_Reconfigured(renders=True,isDiscrete=False)
+    environment._reset()
+   
     #p.resetBasePositionAndOrientation(self.kukaUid,[-0.100000,0.000000,0.070000],[0.000000,0.000000,0.000000,1.000000])
     randomObjs = add_random_objs_to_scene(10)	  
     motorsIds=[]
@@ -315,10 +318,28 @@ def setting_simulation_env():
             img_arr = p.getCameraImage(640,512,viewMatrix=viewMat,projectionMatrix=projMatrix,lightDirection=[1,1,1])#640*512*3 
             # write_from_imgarr(img_arr, img_serial_num)
             subed = substitute_from_imgarr(img_arr,image)
+            
             subed = cv2.cvtColor(subed, cv2.COLOR_RGB2BGR)
-            cv2.imwrite("sim_backSubed/{0:0>6}_subed.jpeg".format(img_serial_num),subed)
+            cv2.imwrite("sim_backSubed_test/{0:0>6}_subed_test.jpeg".format(img_serial_num),subed)
+
+            #save original image and mask as well
+            bgra =img_arr[2]#imgarr[3] depth image; imgarr[4] segmentation mask
+            img = np.reshape(bgra, (512, 640, 4)).astype(np.uint8)#BGRA
+            img = cv2.cvtColor(img,cv2.COLOR_BGRA2RGB)
+            segmentation_mask = img_arr[4]
+            segmentation_mask = np.reshape(segmentation_mask,(512,640,1)).astype(np.uint8)
+            seg_fig = plt.imshow(segmentation_mask[:,:,0], interpolation='nearest', aspect='equal')
+            plt.axis('off')
+            plt.savefig("sim_backSubed_test/{0:0>6}_segmentation_test.jpeg".format(img_serial_num), bbox_inches='tight')
+
+            # seg_fig = plt.imsave("sim_backSubed_test/{0:0>6}_segmentation_test.jpeg".format(img_serial_num),segmentation_mask)
+            # segmentation_mask = (255*np.reshape(segmentation_mask,(512,640))/np.max(segmentation_mask)).astype(np.uint8)
+            # segmentation_mask = np.dstack((segmentation_mask,segmentation_mask,segmentation_mask))
+            cv2.imwrite("sim_backSubed_test/{0:0>6}_original_test.jpeg".format(img_serial_num),img)
+            # cv2.imwrite("sim_backSubed_test/{0:0>6}_segmentation_test.jpeg".format(img_serial_num),segmentation_mask)
+
             img_serial_num +=1
-        if img_serial_num>10000:#40000
+        if img_serial_num>20:#40000
             with open("sim_images/serial_num_log.txt","w") as f:
                 f.write(str(img_serial_num))
             break     
@@ -332,6 +353,6 @@ def setting_simulation_env():
 
 if __name__ == '__main__':
     # main()
-    #main_usingEnvOnly()
+    # main_usingEnvOnly()
     setting_simulation_env()
     
